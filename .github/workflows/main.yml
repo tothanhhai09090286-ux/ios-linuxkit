@@ -9,55 +9,30 @@ jobs:
 
     steps:
 
-      # ========================================
-      # 1. CHECKOUT
-      # ========================================
       - name: Checkout LinuxKit
         uses: actions/checkout@v4
         with:
           submodules: recursive
 
-
-      # ========================================
-      # 2. CHECK XCODE / IOS SDK
-      # ========================================
       - name: Check Xcode and iOS SDK
         run: |
-          echo "=== XCODE ==="
           xcodebuild -version
-
-          echo
-          echo "=== XCODE SELECT ==="
           xcode-select -p
-
-          echo
-          echo "=== IOS SDK ==="
           xcrun --sdk iphoneos --show-sdk-version
 
-          echo
-          echo "=== PROJECT SCHEMES ==="
-          xcodebuild \
-            -project iSH.xcodeproj \
-            -list
-
-
-      # ========================================
-      # 3. BUILD iSH-ARM64
-      # ========================================
       - name: Build iSH-ARM64
         shell: bash
         run: |
           set +e
 
+          LIB_PATH="$GITHUB_WORKSPACE/build/DerivedData/Build/Products/Debug-ApplePleaseFixFB19282108-iphoneos"
+
           echo "========================================"
           echo "BUILD iSH-ARM64"
           echo "========================================"
-
-          LIB_PATH="$GITHUB_WORKSPACE/build/DerivedData/Build/Products/Debug-ApplePleaseFixFB19282108-iphoneos"
-
-          echo
           echo "LIBRARY PATH:"
           echo "$LIB_PATH"
+          echo
 
           xcodebuild \
             -project iSH.xcodeproj \
@@ -69,23 +44,40 @@ jobs:
             LIBRARY_SEARCH_PATHS='$(inherited) '"$LIB_PATH" \
             CODE_SIGNING_ALLOWED=NO \
             CODE_SIGNING_REQUIRED=NO \
-            build 2>&1 | tee build.log
+            build > build.log 2>&1
 
-          BUILD_STATUS=${PIPESTATUS[0]}
-
-          echo
-          echo "========================================"
-          echo "ACTUAL ERRORS"
-          echo "========================================"
-
-          grep -E \
-            "error:|ld:|Undefined symbols|symbol\(s\) not found|library .* not found" \
-            build.log \
-            | tail -100
+          BUILD_STATUS=$?
 
           echo
           echo "========================================"
-          echo "LIBISH CHECK"
+          echo "BUILD RESULT"
+          echo "========================================"
+
+          if [ "$BUILD_STATUS" -eq 0 ]; then
+            echo "BUILD SUCCEEDED"
+          else
+            echo "BUILD FAILED"
+            echo
+            echo "========================================"
+            echo "ACTUAL ERRORS"
+            echo "========================================"
+
+            grep -E \
+              "error:|ld:|Undefined symbols|symbol\(s\) not found|library .* not found" \
+              build.log \
+              | tail -100
+
+            echo
+            echo "========================================"
+            echo "LAST 30 BUILD LOG LINES"
+            echo "========================================"
+
+            tail -30 build.log
+          fi
+
+          echo
+          echo "========================================"
+          echo "LIBISH"
           echo "========================================"
 
           find build/DerivedData/Build/Products \
@@ -95,7 +87,7 @@ jobs:
 
           echo
           echo "========================================"
-          echo "LIBISH_EMU CHECK"
+          echo "LIBISH_EMU"
           echo "========================================"
 
           find build/DerivedData/Build/Products \
@@ -103,33 +95,16 @@ jobs:
             -type f \
             -print
 
-          echo
-          echo "========================================"
-          echo "BUILD EXIT CODE"
-          echo "========================================"
-
-          echo "$BUILD_STATUS"
-
           exit "$BUILD_STATUS"
 
-
-      # ========================================
-      # 4. FIND APPLICATION
-      # ========================================
       - name: Find application
         if: success()
         run: |
-          echo "=== Built applications ==="
-
           find build/DerivedData/Build/Products \
             -name "*.app" \
             -type d \
             -print
 
-
-      # ========================================
-      # 5. PACKAGE APPLICATION
-      # ========================================
       - name: Package application
         if: success()
         run: |
@@ -145,22 +120,13 @@ jobs:
             exit 1
           fi
 
-          echo "Found application:"
-          echo "$APP_PATH"
-
           rm -rf Payload
           mkdir -p Payload
-
           cp -R "$APP_PATH" Payload/
 
           rm -f LinuxKit-iSH-ARM64.zip
-
           zip -r LinuxKit-iSH-ARM64.zip Payload
 
-
-      # ========================================
-      # 6. UPLOAD ARTIFACT
-      # ========================================
       - name: Upload LinuxKit build
         if: success()
         uses: actions/upload-artifact@v4
