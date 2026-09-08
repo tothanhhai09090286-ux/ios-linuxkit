@@ -13,9 +13,10 @@ jobs:
         with:
           submodules: recursive
 
-      - name: Show build environment
+      - name: Check Xcode and iOS SDK
         run: |
           xcodebuild -version
+          xcode-select -p
           xcrun --sdk iphoneos --show-sdk-version
 
       - name: Build iSH-ARM64
@@ -26,6 +27,7 @@ jobs:
             -configuration Debug-ApplePleaseFixFB19282108 \
             -destination 'generic/platform=iOS' \
             -derivedDataPath build/DerivedData \
+            IPHONEOS_DEPLOYMENT_TARGET=15.0 \
             CODE_SIGNING_ALLOWED=NO \
             CODE_SIGNING_REQUIRED=NO \
             build
@@ -33,6 +35,7 @@ jobs:
       - name: Find application
         run: |
           echo "=== Built applications ==="
+
           find build/DerivedData/Build/Products \
             -name "*.app" \
             -type d \
@@ -42,22 +45,29 @@ jobs:
         run: |
           APP_PATH=$(find build/DerivedData/Build/Products \
             -name "*.app" \
-            -type d | head -1)
+            -type d \
+            | head -1)
 
           if [ -z "$APP_PATH" ]; then
             echo "ERROR: No .app found"
+            echo "=== Build directory ==="
+            find build/DerivedData/Build/Products \
+              -maxdepth 4 \
+              -print
             exit 1
           fi
 
-          echo "Packaging: $APP_PATH"
+          echo "Found application:"
+          echo "$APP_PATH"
 
           mkdir -p Payload
           cp -R "$APP_PATH" Payload/
 
           zip -r LinuxKit-iSH-ARM64.zip Payload
 
-      - name: Upload build artifact
+      - name: Upload LinuxKit build
         uses: actions/upload-artifact@v4
         with:
           name: LinuxKit-iSH-ARM64
           path: LinuxKit-iSH-ARM64.zip
+          if-no-files-found: error
