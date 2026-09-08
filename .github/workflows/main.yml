@@ -9,102 +9,132 @@ jobs:
 
     steps:
 
+      # ========================================
+      # 1. CHECKOUT
+      # ========================================
       - name: Checkout LinuxKit
         uses: actions/checkout@v4
         with:
           submodules: recursive
 
+
+      # ========================================
+      # 2. CHECK XCODE
+      # ========================================
       - name: Check Xcode and iOS SDK
         run: |
+          echo "=== XCODE ==="
           xcodebuild -version
-          xcode-select -p
+
+          echo
+          echo "=== IOS SDK ==="
           xcrun --sdk iphoneos --show-sdk-version
 
+
+      # ========================================
+      # 3. BUILD
+      # ========================================
       - name: Build iSH-ARM64
         shell: bash
         run: |
           set +e
 
-          LIB_PATH="$GITHUB_WORKSPACE/build/DerivedData/Build/Products/Debug-ApplePleaseFixFB19282108-iphoneos"
+          DERIVED="$GITHUB_WORKSPACE/build/DerivedData"
+
+          MESON_LIB="$DERIVED/Build/Products/Debug-ApplePleaseFixFB19282108-iphoneos"
+
+          RELEASE_LIB="$DERIVED/Build/Products/Release-iphoneos"
 
           echo "========================================"
           echo "BUILD iSH-ARM64"
           echo "========================================"
-          echo "LIBRARY PATH:"
-          echo "$LIB_PATH"
+
+          echo "MESON LIB:"
+          echo "$MESON_LIB"
+
           echo
+          echo "RELEASE LIB:"
+          echo "$RELEASE_LIB"
+
+          echo
+          echo "========================================"
+          echo "XCODE BUILD"
+          echo "========================================"
 
           xcodebuild \
             -project iSH.xcodeproj \
             -scheme iSH-ARM64 \
             -configuration Debug-ApplePleaseFixFB19282108 \
             -destination 'generic/platform=iOS' \
-            -derivedDataPath build/DerivedData \
+            -derivedDataPath "$DERIVED" \
             IPHONEOS_DEPLOYMENT_TARGET=15.0 \
-            LIBRARY_SEARCH_PATHS='$(inherited) '"$LIB_PATH" \
+            LIBRARY_SEARCH_PATHS="$MESON_LIB $RELEASE_LIB" \
+            OTHER_LDFLAGS="-L$MESON_LIB -L$RELEASE_LIB" \
             CODE_SIGNING_ALLOWED=NO \
             CODE_SIGNING_REQUIRED=NO \
             build > build.log 2>&1
 
-          BUILD_STATUS=$?
+          STATUS=$?
 
           echo
           echo "========================================"
-          echo "BUILD RESULT"
+          echo "LIBRARIES CREATED"
           echo "========================================"
 
-          if [ "$BUILD_STATUS" -eq 0 ]; then
-            echo "BUILD SUCCEEDED"
-          else
-            echo "BUILD FAILED"
-            echo
-            echo "========================================"
-            echo "ACTUAL ERRORS"
-            echo "========================================"
-
-            grep -E \
-              "error:|ld:|Undefined symbols|symbol\(s\) not found|library .* not found" \
-              build.log \
-              | tail -100
-
-            echo
-            echo "========================================"
-            echo "LAST 30 BUILD LOG LINES"
-            echo "========================================"
-
-            tail -30 build.log
-          fi
-
-          echo
-          echo "========================================"
-          echo "LIBISH"
-          echo "========================================"
-
-          find build/DerivedData/Build/Products \
-            -name "libish.a" \
+          find "$DERIVED/Build/Products" \
+            \( \
+              -name "libish.a" \
+              -o -name "libish_emu.a" \
+              -o -name "libfakefs.a" \
+              -o -name "libarchive.a" \
+            \) \
             -type f \
             -print
 
           echo
           echo "========================================"
-          echo "LIBISH_EMU"
+          echo "LINKER COMMAND"
           echo "========================================"
 
-          find build/DerivedData/Build/Products \
-            -name "libish_emu.a" \
-            -type f \
-            -print
+          grep -n "Ld " build.log | tail -5 || true
 
-          exit "$BUILD_STATUS"
+          echo
+          echo "========================================"
+          echo "ERRORS"
+          echo "========================================"
 
+          grep -inE \
+            "error:|ld:|Undefined symbols|not found|failed" \
+            build.log \
+            | tail -80 || true
+
+          echo
+          echo "========================================"
+          echo "BUILD STATUS"
+          echo "========================================"
+
+          echo "$STATUS"
+
+          exit "$STATUS"
+
+
+      # ========================================
+      # 4. FIND APP
+      # ========================================
       - name: Find application
         if: success()
         run: |
+          echo "=== APPLICATION ==="
+
           find build/DerivedData/Build/Products \
             -name "*.app" \
             -type d \
             -print
 
+
+      # ========================================
+      # 5. PACKAGE
+      # ========================================
       - name: Package application
         if: success()
         run: |
@@ -120,13 +150,22 @@ jobs:
             exit 1
           fi
 
+          echo "APPLICATION:"
+          echo "$APP_PATH"
+
           rm -rf Payload
           mkdir -p Payload
+
           cp -R "$APP_PATH" Payload/
 
           rm -f LinuxKit-iSH-ARM64.zip
+
           zip -r LinuxKit-iSH-ARM64.zip Payload
 
+
+      # ========================================
+      # 6. UPLOAD
+      # ========================================
       - name: Upload LinuxKit build
         if: success()
         uses: actions/upload-artifact@v4
