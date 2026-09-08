@@ -19,9 +19,9 @@ jobs:
 
 
       # ========================================
-      # 2. INSTALL BUILD TOOLS
+      # 2. INSTALL LLVM + LLD + MESON + NINJA
       # ========================================
-      - name: Install LLVM Meson and Ninja
+      - name: Install Build Tools
         shell: bash
         run: |
           set -e
@@ -30,48 +30,66 @@ jobs:
           echo "INSTALL BUILD TOOLS"
           echo "========================================"
 
-          brew install llvm meson ninja
+          brew install llvm@20 lld@20 meson ninja
 
-          LLVM_PREFIX="$(brew --prefix llvm)"
+          LLVM_PREFIX="$(brew --prefix llvm@20)"
+          LLD_PREFIX="$(brew --prefix lld@20)"
 
           echo
           echo "LLVM PREFIX:"
           echo "$LLVM_PREFIX"
 
           echo
+          echo "LLD PREFIX:"
+          echo "$LLD_PREFIX"
+
+          echo
           echo "========================================"
-          echo "TOOL PATHS"
+          echo "CONFIGURE PATH"
           echo "========================================"
 
           echo "$LLVM_PREFIX/bin" >> "$GITHUB_PATH"
+          echo "$LLD_PREFIX/bin" >> "$GITHUB_PATH"
 
-          export PATH="$LLVM_PREFIX/bin:$PATH"
+          export PATH="$LLVM_PREFIX/bin:$LLD_PREFIX/bin:$PATH"
 
           echo
-          echo "CLANG:"
+          echo "========================================"
+          echo "CLANG"
+          echo "========================================"
+
           command -v clang
           clang --version
 
           echo
-          echo "LLD:"
+          echo "========================================"
+          echo "LLD"
+          echo "========================================"
+
           command -v ld.lld
           ld.lld --version
 
           echo
-          echo "MESON:"
+          echo "========================================"
+          echo "MESON"
+          echo "========================================"
+
           command -v meson
           meson --version
 
           echo
-          echo "NINJA:"
+          echo "========================================"
+          echo "NINJA"
+          echo "========================================"
+
           command -v ninja
           ninja --version
 
 
       # ========================================
-      # 3. CHECK XCODE
+      # 3. CHECK XCODE + TOOLCHAIN
       # ========================================
-      - name: Check Xcode and iOS SDK
+      - name: Check Xcode and Toolchain
         shell: bash
         run: |
           set -e
@@ -92,7 +110,7 @@ jobs:
 
           echo
           echo "========================================"
-          echo "BUILD TOOLS"
+          echo "TOOLS"
           echo "========================================"
 
           command -v clang
@@ -120,35 +138,6 @@ jobs:
           echo "BUILD iSH-ARM64"
           echo "========================================"
 
-          echo
-          echo "PATH:"
-          echo "$PATH"
-
-          echo
-          echo "CLANG:"
-          command -v clang
-          clang --version
-
-          echo
-          echo "LLD:"
-          command -v ld.lld
-          ld.lld --version
-
-          echo
-          echo "MESON:"
-          command -v meson
-          meson --version
-
-          echo
-          echo "NINJA:"
-          command -v ninja
-          ninja --version
-
-          echo
-          echo "========================================"
-          echo "XCODEBUILD"
-          echo "========================================"
-
           xcodebuild \
             -project iSH.xcodeproj \
             -scheme iSH-ARM64 \
@@ -164,23 +153,13 @@ jobs:
 
           echo
           echo "========================================"
-          echo "IMPORTANT ERRORS"
+          echo "BUILD ERRORS"
           echo "========================================"
 
           grep -inE \
             "error:|Error:|FAILED|failed|fatal|cannot|not found|Undefined symbols|unknown type name|undeclared" \
             build.log \
             | tail -120 || true
-
-          echo
-          echo "========================================"
-          echo "MESON / NINJA"
-          echo "========================================"
-
-          grep -inE \
-            "meson|ninja" \
-            build.log \
-            | tail -80 || true
 
           echo
           echo "========================================"
@@ -208,13 +187,13 @@ jobs:
 
 
       # ========================================
-      # 5. FIND APPLICATION
+      # 5. FIND APP
       # ========================================
       - name: Find application
         if: success()
         run: |
           echo "========================================"
-          echo "BUILT APPLICATION"
+          echo "APPLICATION"
           echo "========================================"
 
           find build/DerivedData/Build/Products \
@@ -224,7 +203,7 @@ jobs:
 
 
       # ========================================
-      # 6. PACKAGE APPLICATION
+      # 6. PACKAGE
       # ========================================
       - name: Package application
         if: success()
@@ -256,7 +235,7 @@ jobs:
 
 
       # ========================================
-      # 7. UPLOAD ARTIFACT
+      # 7. UPLOAD
       # ========================================
       - name: Upload LinuxKit build
         if: success()
