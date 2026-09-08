@@ -1,0 +1,40 @@
+name: Check LinuxKit iOS Build Environment
+
+on:
+  workflow_dispatch:
+
+jobs:
+  check-ios:
+    runs-on: xcode-27
+
+    steps:
+      - name: Checkout LinuxKit
+        uses: actions/checkout@v4
+        with:
+          submodules: recursive
+
+      - name: Check Xcode
+        run: |
+          xcodebuild -version
+          xcode-select -p
+          xcrun --sdk iphoneos --show-sdk-version
+
+      - name: Check project
+        run: |
+          echo "=== Repository ==="
+          pwd
+          echo "=== Files ==="
+          ls -la
+          echo "=== Xcode projects ==="
+          find . -maxdepth 2 \( -name "*.xcodeproj" -o -name "*.xcworkspace" \) -print
+
+      - name: Check schemes
+        run: |
+          xcodebuild \
+            -project iSH.xcodeproj \
+            -list
+
+      - name: Check iOS SDK
+        run: |
+          xcrun --sdk iphoneos \
+            xcodebuild -version
