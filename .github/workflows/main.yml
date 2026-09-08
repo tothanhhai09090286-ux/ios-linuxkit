@@ -19,7 +19,7 @@ jobs:
 
 
       # ========================================
-      # 2. CHECK XCODE / SDK
+      # 2. CHECK XCODE / IOS SDK
       # ========================================
       - name: Check Xcode and iOS SDK
         run: |
@@ -35,11 +35,7 @@ jobs:
           xcrun --sdk iphoneos --show-sdk-version
 
           echo
-          echo "=== PROJECT ==="
-          ls -la
-
-          echo
-          echo "=== SCHEMES ==="
+          echo "=== PROJECT SCHEMES ==="
           xcodebuild \
             -project iSH.xcodeproj \
             -list
@@ -49,6 +45,7 @@ jobs:
       # 3. BUILD iSH-ARM64
       # ========================================
       - name: Build iSH-ARM64
+        shell: bash
         run: |
           set +e
 
@@ -72,13 +69,23 @@ jobs:
             LIBRARY_SEARCH_PATHS='$(inherited) '"$LIB_PATH" \
             CODE_SIGNING_ALLOWED=NO \
             CODE_SIGNING_REQUIRED=NO \
-            build
+            build 2>&1 | tee build.log
 
-          BUILD_STATUS=$?
+          BUILD_STATUS=${PIPESTATUS[0]}
 
           echo
           echo "========================================"
-          echo "SEARCHING FOR libish.a"
+          echo "ACTUAL ERRORS"
+          echo "========================================"
+
+          grep -E \
+            "error:|ld:|Undefined symbols|symbol\(s\) not found|library .* not found" \
+            build.log \
+            | tail -100
+
+          echo
+          echo "========================================"
+          echo "LIBISH CHECK"
           echo "========================================"
 
           find build/DerivedData/Build/Products \
@@ -88,7 +95,7 @@ jobs:
 
           echo
           echo "========================================"
-          echo "SEARCHING FOR libish_emu.a"
+          echo "LIBISH_EMU CHECK"
           echo "========================================"
 
           find build/DerivedData/Build/Products \
@@ -98,22 +105,12 @@ jobs:
 
           echo
           echo "========================================"
-          echo "BUILD PRODUCTS"
-          echo "========================================"
-
-          find build/DerivedData/Build/Products \
-            -maxdepth 3 \
-            -print 2>/dev/null \
-            | head -300
-
-          echo
-          echo "========================================"
-          echo "XCODEBUILD EXIT CODE"
+          echo "BUILD EXIT CODE"
           echo "========================================"
 
           echo "$BUILD_STATUS"
 
-          exit $BUILD_STATUS
+          exit "$BUILD_STATUS"
 
 
       # ========================================
@@ -162,7 +159,7 @@ jobs:
 
 
       # ========================================
-      # 6. UPLOAD BUILD ARTIFACT
+      # 6. UPLOAD ARTIFACT
       # ========================================
       - name: Upload LinuxKit build
         if: success()
