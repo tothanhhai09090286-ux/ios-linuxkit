@@ -8,19 +8,54 @@ jobs:
     runs-on: xcode-27
 
     steps:
+
+      # ========================================
+      # 1. CHECKOUT
+      # ========================================
       - name: Checkout LinuxKit
         uses: actions/checkout@v4
         with:
           submodules: recursive
 
+
+      # ========================================
+      # 2. CHECK XCODE / SDK
+      # ========================================
       - name: Check Xcode and iOS SDK
         run: |
+          echo "=== XCODE ==="
           xcodebuild -version
+
+          echo
+          echo "=== XCODE SELECT ==="
           xcode-select -p
+
+          echo
+          echo "=== IOS SDK ==="
           xcrun --sdk iphoneos --show-sdk-version
 
+          echo
+          echo "=== PROJECT ==="
+          ls -la
+
+          echo
+          echo "=== SCHEMES ==="
+          xcodebuild \
+            -project iSH.xcodeproj \
+            -list
+
+
+      # ========================================
+      # 3. BUILD iSH-ARM64
+      # ========================================
       - name: Build iSH-ARM64
         run: |
+          set +e
+
+          echo "========================================"
+          echo "BUILD iSH-ARM64"
+          echo "========================================"
+
           xcodebuild \
             -project iSH.xcodeproj \
             -scheme iSH-ARM64 \
@@ -32,7 +67,54 @@ jobs:
             CODE_SIGNING_REQUIRED=NO \
             build
 
+          BUILD_STATUS=$?
+
+          echo
+          echo "========================================"
+          echo "SEARCHING FOR libish.a"
+          echo "========================================"
+
+          find . \
+            \( -name "libish.a" \
+            -o -name "libish_emu.a" \
+            -o -name "libarchive.a" \) \
+            -print
+
+          echo
+          echo "========================================"
+          echo "SEARCHING ALL iSH BUILD FILES"
+          echo "========================================"
+
+          find build \
+            -iname "*ish*" \
+            -print 2>/dev/null \
+            | head -200
+
+          echo
+          echo "========================================"
+          echo "BUILD PRODUCTS"
+          echo "========================================"
+
+          find build/DerivedData/Build/Products \
+            -maxdepth 4 \
+            -print 2>/dev/null \
+            | head -300
+
+          echo
+          echo "========================================"
+          echo "XCODEBUILD EXIT CODE"
+          echo "========================================"
+
+          echo "$BUILD_STATUS"
+
+          exit $BUILD_STATUS
+
+
+      # ========================================
+      # 4. FIND APPLICATION
+      # ========================================
       - name: Find application
+        if: success()
         run: |
           echo "=== Built applications ==="
 
@@ -41,8 +123,15 @@ jobs:
             -type d \
             -print
 
+
+      # ========================================
+      # 5. PACKAGE APPLICATION
+      # ========================================
       - name: Package application
+        if: success()
         run: |
+          set -e
+
           APP_PATH=$(find build/DerivedData/Build/Products \
             -name "*.app" \
             -type d \
@@ -50,22 +139,27 @@ jobs:
 
           if [ -z "$APP_PATH" ]; then
             echo "ERROR: No .app found"
-            echo "=== Build directory ==="
-            find build/DerivedData/Build/Products \
-              -maxdepth 4 \
-              -print
             exit 1
           fi
 
           echo "Found application:"
           echo "$APP_PATH"
 
+          rm -rf Payload
           mkdir -p Payload
+
           cp -R "$APP_PATH" Payload/
+
+          rm -f LinuxKit-iSH-ARM64.zip
 
           zip -r LinuxKit-iSH-ARM64.zip Payload
 
+
+      # ========================================
+      # 6. UPLOAD BUILD ARTIFACT
+      # ========================================
       - name: Upload LinuxKit build
+        if: success()
         uses: actions/upload-artifact@v4
         with:
           name: LinuxKit-iSH-ARM64
