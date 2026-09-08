@@ -9,87 +9,74 @@ jobs:
 
     steps:
 
-      # ========================================
-      # 1. CHECKOUT
-      # ========================================
+      # ============================================================
+      # 1. CHECKOUT SOURCE
+      # ============================================================
       - name: Checkout LinuxKit
         uses: actions/checkout@v4
         with:
           submodules: recursive
 
+      # ============================================================
+      # 2. INSTALL ONLY MESON + NINJA
+      # ============================================================
+      - name: Install Meson and Ninja
+        shell: bash
+        run: |
+          set -e
 
-      # ========================================
-      # 2. INSTALL LLVM + LLD + MESON + NINJA
-      # ========================================
-      - name: Install Build Tools
+          brew install meson ninja
+
+          echo "========================================"
+          echo "MESON"
+          echo "========================================"
+          command -v meson
+          meson --version
+
+          echo "========================================"
+          echo "NINJA"
+          echo "========================================"
+          command -v ninja
+          ninja --version
+
+      # ============================================================
+      # 3. FIX XCODE 27 DISPATCH HEADER ISSUE
+      # ============================================================
+      - name: Prepare Xcode 27 compatibility
         shell: bash
         run: |
           set -e
 
           echo "========================================"
-          echo "INSTALL BUILD TOOLS"
+          echo "platform/darwin.c BEFORE PATCH"
           echo "========================================"
 
-          brew install llvm@20 lld@20 meson ninja
-
-          LLVM_PREFIX="$(brew --prefix llvm@20)"
-          LLD_PREFIX="$(brew --prefix lld@20)"
-
-          echo
-          echo "LLVM PREFIX:"
-          echo "$LLVM_PREFIX"
-
-          echo
-          echo "LLD PREFIX:"
-          echo "$LLD_PREFIX"
+          sed -n '1,50p' platform/darwin.c
 
           echo
           echo "========================================"
-          echo "CONFIGURE PATH"
+          echo "ADDING DISPATCH HEADER IF NEEDED"
           echo "========================================"
 
-          echo "$LLVM_PREFIX/bin" >> "$GITHUB_PATH"
-          echo "$LLD_PREFIX/bin" >> "$GITHUB_PATH"
-
-          export PATH="$LLVM_PREFIX/bin:$LLD_PREFIX/bin:$PATH"
+          if ! grep -q '#include <dispatch/dispatch.h>' platform/darwin.c; then
+            sed -i.bak \
+              '1i\
+          #include <dispatch/dispatch.h>\
+          ' \
+              platform/darwin.c
+          fi
 
           echo
           echo "========================================"
-          echo "CLANG"
+          echo "platform/darwin.c AFTER PATCH"
           echo "========================================"
 
-          command -v clang
-          clang --version
+          sed -n '1,50p' platform/darwin.c
 
-          echo
-          echo "========================================"
-          echo "LLD"
-          echo "========================================"
-
-          command -v ld.lld
-          ld.lld --version
-
-          echo
-          echo "========================================"
-          echo "MESON"
-          echo "========================================"
-
-          command -v meson
-          meson --version
-
-          echo
-          echo "========================================"
-          echo "NINJA"
-          echo "========================================"
-
-          command -v ninja
-          ninja --version
-
-
-      # ========================================
-      # 3. CHECK XCODE + TOOLCHAIN
-      # ========================================
-      - name: Check Xcode and Toolchain
+      # ============================================================
+      # 4. CHECK XCODE / IOS SDK
+      # ============================================================
+      - name: Check Xcode and iOS SDK
         shell: bash
         run: |
           set -e
@@ -99,43 +86,41 @@ jobs:
           echo "========================================"
 
           xcodebuild -version
-
-          echo
-          echo "XCODE SELECT:"
           xcode-select -p
 
           echo
-          echo "IOS SDK:"
+          echo "========================================"
+          echo "IOS SDK"
+          echo "========================================"
+
           xcrun --sdk iphoneos --show-sdk-version
+          xcrun --find clang
 
           echo
           echo "========================================"
-          echo "TOOLS"
+          echo "CLANG"
           echo "========================================"
 
-          command -v clang
-          clang --version
+          xcrun clang --version
 
-          command -v ld.lld
-          ld.lld --version
+          echo
+          echo "========================================"
+          echo "MESON / NINJA"
+          echo "========================================"
 
-          command -v meson
           meson --version
-
-          command -v ninja
           ninja --version
 
-
-      # ========================================
-      # 4. BUILD iSH-ARM64
-      # ========================================
+      # ============================================================
+      # 5. BUILD iSH-ARM64
+      # ============================================================
       - name: Build iSH-ARM64
         shell: bash
         run: |
           set +e
 
           echo "========================================"
-          echo "BUILD iSH-ARM64"
+          echo "BUILD LINUXKIT iSH-ARM64"
           echo "========================================"
 
           xcodebuild \
@@ -153,17 +138,17 @@ jobs:
 
           echo
           echo "========================================"
-          echo "BUILD ERRORS"
+          echo "IMPORTANT ERRORS"
           echo "========================================"
 
           grep -inE \
             "error:|Error:|FAILED|failed|fatal|cannot|not found|Undefined symbols|unknown type name|undeclared" \
             build.log \
-            | tail -120 || true
+            | tail -150 || true
 
           echo
           echo "========================================"
-          echo "LIBRARIES"
+          echo "LIBRARIES CREATED"
           echo "========================================"
 
           find build/DerivedData/Build/Products \
@@ -181,16 +166,16 @@ jobs:
           echo "BUILD STATUS"
           echo "========================================"
 
-          echo "$STATUS"
+          echo "STATUS=$STATUS"
 
           exit "$STATUS"
 
-
-      # ========================================
-      # 5. FIND APP
-      # ========================================
+      # ============================================================
+      # 6. FIND APP
+      # ============================================================
       - name: Find application
         if: success()
+        shell: bash
         run: |
           echo "========================================"
           echo "APPLICATION"
@@ -201,10 +186,9 @@ jobs:
             -type d \
             -print
 
-
-      # ========================================
-      # 6. PACKAGE
-      # ========================================
+      # ============================================================
+      # 7. PACKAGE APP
+      # ============================================================
       - name: Package application
         if: success()
         shell: bash
@@ -221,7 +205,10 @@ jobs:
             exit 1
           fi
 
-          echo "APPLICATION:"
+          echo "========================================"
+          echo "APPLICATION FOUND"
+          echo "========================================"
+
           echo "$APP_PATH"
 
           rm -rf Payload
@@ -233,10 +220,9 @@ jobs:
 
           zip -r LinuxKit-iSH-ARM64.zip Payload
 
-
-      # ========================================
-      # 7. UPLOAD
-      # ========================================
+      # ============================================================
+      # 8. UPLOAD ARTIFACT
+      # ============================================================
       - name: Upload LinuxKit build
         if: success()
         uses: actions/upload-artifact@v4
