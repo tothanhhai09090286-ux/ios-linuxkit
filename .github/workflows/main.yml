@@ -19,7 +19,30 @@ jobs:
 
 
       # ========================================
-      # 2. CHECK XCODE
+      # 2. INSTALL MESON + NINJA
+      # ========================================
+      - name: Install Meson and Ninja
+        shell: bash
+        run: |
+          set -e
+
+          echo "Installing Meson and Ninja..."
+
+          brew install meson ninja
+
+          echo
+          echo "=== MESON ==="
+          command -v meson
+          meson --version
+
+          echo
+          echo "=== NINJA ==="
+          command -v ninja
+          ninja --version
+
+
+      # ========================================
+      # 3. CHECK XCODE / SDK
       # ========================================
       - name: Check Xcode and iOS SDK
         run: |
@@ -30,46 +53,49 @@ jobs:
           echo "=== IOS SDK ==="
           xcrun --sdk iphoneos --show-sdk-version
 
+          echo
+          echo "=== MESON ==="
+          command -v meson
+          meson --version
+
+          echo
+          echo "=== NINJA ==="
+          command -v ninja
+          ninja --version
+
 
       # ========================================
-      # 3. BUILD
+      # 4. BUILD iSH-ARM64
       # ========================================
       - name: Build iSH-ARM64
         shell: bash
         run: |
           set +e
 
-          DERIVED="$GITHUB_WORKSPACE/build/DerivedData"
-
-          MESON_LIB="$DERIVED/Build/Products/Debug-ApplePleaseFixFB19282108-iphoneos"
-
-          RELEASE_LIB="$DERIVED/Build/Products/Release-iphoneos"
-
           echo "========================================"
           echo "BUILD iSH-ARM64"
           echo "========================================"
 
-          echo "MESON LIB:"
-          echo "$MESON_LIB"
+          echo
+          echo "Meson:"
+          command -v meson
+          meson --version
 
           echo
-          echo "RELEASE LIB:"
-          echo "$RELEASE_LIB"
+          echo "Ninja:"
+          command -v ninja
+          ninja --version
 
           echo
-          echo "========================================"
-          echo "XCODE BUILD"
-          echo "========================================"
+          echo "Running Xcode build..."
 
           xcodebuild \
             -project iSH.xcodeproj \
             -scheme iSH-ARM64 \
             -configuration Debug-ApplePleaseFixFB19282108 \
             -destination 'generic/platform=iOS' \
-            -derivedDataPath "$DERIVED" \
+            -derivedDataPath build/DerivedData \
             IPHONEOS_DEPLOYMENT_TARGET=15.0 \
-            LIBRARY_SEARCH_PATHS="$MESON_LIB $RELEASE_LIB" \
-            OTHER_LDFLAGS="-L$MESON_LIB -L$RELEASE_LIB" \
             CODE_SIGNING_ALLOWED=NO \
             CODE_SIGNING_REQUIRED=NO \
             build > build.log 2>&1
@@ -78,10 +104,20 @@ jobs:
 
           echo
           echo "========================================"
-          echo "LIBRARIES CREATED"
+          echo "MESON / NINJA ERRORS"
           echo "========================================"
 
-          find "$DERIVED/Build/Products" \
+          grep -inE \
+            "meson:|ninja: error|error:|ld:|Undefined symbols|not found|failed" \
+            build.log \
+            | tail -100 || true
+
+          echo
+          echo "========================================"
+          echo "LIBRARIES"
+          echo "========================================"
+
+          find build/DerivedData/Build/Products \
             \( \
               -name "libish.a" \
               -o -name "libish_emu.a" \
@@ -90,23 +126,6 @@ jobs:
             \) \
             -type f \
             -print
-
-          echo
-          echo "========================================"
-          echo "LINKER COMMAND"
-          echo "========================================"
-
-          grep -n "Ld " build.log | tail -5 || true
-
-          echo
-          echo "========================================"
-          echo "ERRORS"
-          echo "========================================"
-
-          grep -inE \
-            "error:|ld:|Undefined symbols|not found|failed" \
-            build.log \
-            | tail -80 || true
 
           echo
           echo "========================================"
@@ -119,7 +138,7 @@ jobs:
 
 
       # ========================================
-      # 4. FIND APP
+      # 5. FIND APPLICATION
       # ========================================
       - name: Find application
         if: success()
@@ -133,7 +152,7 @@ jobs:
 
 
       # ========================================
-      # 5. PACKAGE
+      # 6. PACKAGE
       # ========================================
       - name: Package application
         if: success()
@@ -164,7 +183,7 @@ jobs:
 
 
       # ========================================
-      # 6. UPLOAD
+      # 7. UPLOAD
       # ========================================
       - name: Upload LinuxKit build
         if: success()
