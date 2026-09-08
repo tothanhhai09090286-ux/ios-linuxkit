@@ -1,10 +1,10 @@
-name: Check LinuxKit iOS Build Environment
+name: Build LinuxKit iOS ARM64
 
 on:
   workflow_dispatch:
 
 jobs:
-  check-ios:
+  build-ios:
     runs-on: xcode-27
 
     steps:
@@ -13,28 +13,51 @@ jobs:
         with:
           submodules: recursive
 
-      - name: Check Xcode
+      - name: Show build environment
         run: |
           xcodebuild -version
-          xcode-select -p
           xcrun --sdk iphoneos --show-sdk-version
 
-      - name: Check project
-        run: |
-          echo "=== Repository ==="
-          pwd
-          echo "=== Files ==="
-          ls -la
-          echo "=== Xcode projects ==="
-          find . -maxdepth 2 \( -name "*.xcodeproj" -o -name "*.xcworkspace" \) -print
-
-      - name: Check schemes
+      - name: Build iSH-ARM64
         run: |
           xcodebuild \
             -project iSH.xcodeproj \
-            -list
+            -scheme iSH-ARM64 \
+            -configuration Debug-ApplePleaseFixFB19282108 \
+            -destination 'generic/platform=iOS' \
+            -derivedDataPath build/DerivedData \
+            CODE_SIGNING_ALLOWED=NO \
+            CODE_SIGNING_REQUIRED=NO \
+            build
 
-      - name: Check iOS SDK
+      - name: Find application
         run: |
-          xcrun --sdk iphoneos \
-            xcodebuild -version
+          echo "=== Built applications ==="
+          find build/DerivedData/Build/Products \
+            -name "*.app" \
+            -type d \
+            -print
+
+      - name: Package application
+        run: |
+          APP_PATH=$(find build/DerivedData/Build/Products \
+            -name "*.app" \
+            -type d | head -1)
+
+          if [ -z "$APP_PATH" ]; then
+            echo "ERROR: No .app found"
+            exit 1
+          fi
+
+          echo "Packaging: $APP_PATH"
+
+          mkdir -p Payload
+          cp -R "$APP_PATH" Payload/
+
+          zip -r LinuxKit-iSH-ARM64.zip Payload
+
+      - name: Upload build artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: LinuxKit-iSH-ARM64
+          path: LinuxKit-iSH-ARM64.zip
